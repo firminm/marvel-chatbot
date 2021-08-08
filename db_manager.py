@@ -366,13 +366,12 @@ def get_about(args):
             print('No info value for character', info_list[0])
         return info_list
 
-    univ_doc = UNIVERSE_DB.find_one({'alt': args})
+    univ_f = format_univ(args)
+    univ_doc = UNIVERSE_DB.find_one({'alt': univ_f})
     if (univ_doc is None):
-        univ_doc = UNIVERSE_DB.find_one({'name': args})
-    if (univ_doc is None and len(args) > 6):                # if universe formatted as earth-XX
-        univ_doc = UNIVERSE_DB.find_one({'name': args[6:]})
-    if (univ_doc is None and len(args) > 5):                # if universe formatted as earthXX
-        univ_doc - UNIVERSE_DB.find_one({'name': args[5:]})
+        univ_doc = UNIVERSE_DB.find_one({'name': univ_f})
+    
+
 
     if univ_doc is not None:
         try:        # Because I messed up setting up the database and don't feel like fixing it

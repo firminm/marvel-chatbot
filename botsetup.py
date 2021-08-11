@@ -26,7 +26,7 @@ EMBED_PAGE = 1
 
 
 async def set_pfp():
-    with open('MQB03.png', 'rb') as image:
+    with open('/pfp/MQB03.png', 'rb') as image:
         await client.user.edit(avatar=image)
 
 

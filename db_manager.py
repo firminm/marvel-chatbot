@@ -1,3 +1,4 @@
+# Test
 from discord import guild
 import pymongo, os
 from dotenv import load_dotenv
@@ -8,7 +9,7 @@ DB_CLIENT = os.getenv('DB_CLIENT')
 
 db_client = pymongo.MongoClient(DB_CLIENT)
 DB          = db_client["marvelQuotes"]
-QUOTES_DB   = DB["all_marvel_quotes"]
+QUOTES_DB   = DB['all_marvel_quotes']
 UNIVERSE_DB = DB['all_universes']
 CHARS_DB    = DB['all_characters']
 GUILDS_DB   = DB["guilds"]
@@ -18,7 +19,36 @@ def add_guild(guild_id, universe_list=None):
     if universe_list is not None:
         for univ in universe_list:
             universes.append(univ)
-    GUILDS_DB.insert_one({'_id': guild_id, 'universes': universes, 'used_quotes': [], 'exclusion': False})
+    GUILDS_DB.insert_one({'_id': guild_id, 'universes': universes, 'used_quotes': [], 'exclusion': False, 'perms': [-1, -1, -1]})
+
+
+''' Returns dictionary of perms for use in perms.py '''
+def get_all_perms():
+    cursor = GUILDS_DB.find()
+    dict = {}   # key = guild ID, value = guild['perms']
+    for doc in cursor:
+        try:
+            dict[doc['_id']] = doc['perms']
+        except KeyError:    # Occurs on alpha:omega, beta:gamma, and theta:iota fake/setup guilds
+            # print('KeyError on ', doc['_id'])
+            pass
+
+    return dict
+
+
+''' Sets one specific value '''
+def set_perms(guild_id, command_index=0, role=None, reset = False):
+    if reset:
+        GUILDS_DB.update(
+            { '_id': guild_id },
+            { '$set': { "perms" : [-1, -1, -1] } })
+    else:
+        GUILDS_DB.update(
+            { '_id': guild_id },
+            { '$set': { "perms."+str(command_index) : role } })
+
+
+
 
 
 def get_character_list():

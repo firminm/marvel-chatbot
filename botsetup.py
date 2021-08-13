@@ -1,4 +1,4 @@
-import discord, os, random, db_manager
+import discord, os, random, db_manager, perms
 from asyncio import TimeoutError
 from discord import channel
 from discord import message
@@ -247,7 +247,9 @@ async def on_guild_join(guild):
 
 @client.event
 async def on_ready():
+    perms.establish_perms()     # Establishes local dictionary of perms
     print('Logged in as {0.user}'.format(client))
+
 
 
 @client.event
@@ -297,19 +299,27 @@ async def on_message(message):
 
     # Adds specified universe to server's active universes
     elif command == 'add':
-        success = db_manager.add_universe(args, guild_id)
-        if success is not None and args != 'all':
-            reply = 'Universe ' + success + ' successfully added'
-        elif success is not None:   # add all case
-            reply = 'All universes successfully added'
+        if perms.check_perms(guild_id, message.author, is_uvm=True) == False:
+            await message.channel.send('You do not have permission to use this command')
+
         else:
-            reply = 'Universe ' + args + ' was unable to be added'
-        # reply += db_manager.get_universe_list(guild_id)
-        await message.channel.send(reply)
+            success = db_manager.add_universe(args, guild_id)
+            if success is not None and args != 'all':
+                reply = 'Universe ' + success + ' successfully added'
+            elif success is not None:   # add all case
+                reply = 'All universes successfully added'
+            else:
+                reply = 'Universe ' + args + ' was unable to be added'
+            # reply += db_manager.get_universe_list(guild_id)
+            await message.channel.send(reply)
     
     # Removes specified universe from server's active universes
     elif command == 'remove':
-        if args.lower() == 'all':
+        if perms.check_perms(guild_id, message.author, is_uvm=True) == False:
+            await message.channel.send('You do not have permission to use this command')
+
+            
+        elif args.lower() == 'all':
             all_removed = db_manager.remove_all_universes(guild_id)
             if all_removed == True:
                 await message.channel.send('All universes successfully removed')
@@ -374,33 +384,50 @@ async def on_message(message):
     
     # Takes 'used quotes' as args, resets guild's used_quotes to a blank array
     elif command == 'clear':
-        db_manager.clear_used_quotes(guild_id)
-        await message.channel.send('Used quotes cleared')
+        if perms.check_perms(guild_id, message.author, is_uvm=True) == False:
+            await message.channel.send('You do not have permission to use this command')
+        else:
+            db_manager.clear_used_quotes(guild_id)
+            await message.channel.send('Used quotes cleared')
 
     # Toggles quote exclusion on or off... does "-mqb quote Peter Parker" draw from ALL universes, or just those enabled
     elif command == 'exclude':
-        if args == 'on' or args == 'off':
+        if perms.check_perms(guild_id, message.author, is_excl=True) == False:
+            await message.channel.send('You do not have permission to use this command')
+        elif args == 'on' or args == 'off':
             db_manager.toggle_exclude(guild_id, args)
             await message.channel.send('Exclusion turned ' + args)
         else:
             await message.channel.send('Unrecognized argument, please use \"on\" or \"off\"')
 
     # Permission management
-    # Syntax -mqb perms <action> <role> <cmd>
+    # Syntax -mqb perms <set/unset> <cmd> <role>
+    # TODO: Set up so it works with embeds
     elif command == 'perms':
-        # command = message.content.split(' ')[1]
-        # args = message.content.replace('-mqb', '')
-        # args = args.replace(command, '').strip()   
-        full_args = args.split(' ')
-        action = full_args[0]       # add/remove/clear
-        role = full_args[1].strip()
-        if action != 'clear':
-            cmd = full_args[2]
-            print('cmd =', cmd)
+        print('args = ', args)
         
-
-        print('action =', action)
-        print('role =', role)
+        valid_perms = perms.check_perms(guild_id, message.author, is_perms=True)
+        print('can use command:', valid_perms)
+        if  valid_perms and args == 'reset':
+            perms.reset_perms(guild_id)
+            await message.channel.send('Perms reset, to view current permissions use the help command')
+        elif valid_perms:
+            full_args = args.split(' ')
+            action = full_args[0]       # set
+            if action == 'set':
+                cmd = full_args[1].strip()
+                if cmd == '':   # weird bug where 'perms' is replaced by an empty string
+                    cmd = 'perms'
+                role = full_args[2]
+                if message.guild.get_role(role) is None:
+                    await message.channel.send('Invalid Role')
+                else:
+                    perms.set_perms(message.guild, cmd, role)
+                    await message.channel.send('Permission for command {0} set to {1}'.format(cmd, role))
+        else:
+            await message.channel.send('You do not have permission to use this command')
+    
+    
 
     else:
         await message.channel.send('I\'m sorry, I don\'t recognize that command, type \"-mqb help\" for a list of commands')

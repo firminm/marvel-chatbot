@@ -9,10 +9,13 @@ Matthew Firmin [7/22/21]
 
 TODO:
   - Add reaction functionality for favoriting quotes and for reporting bot breaking/bad quote
-  - Make bot check for permissions on each command run
+  - Add quote submission functionality - on command use user gets a google form submission to their DMs
+#   - Make bot check for permissions on each command run
 #   - Make -mqb quote <args> find a quote within enabled universes
   - Add ability to schedule messages
-  - Setup prefixes to be dynamic
+  - Setup prefixes to be dynamic (AKA mass-reformat botsetup.py to fully utilize API with @bot... methods)
+  - Mass reformat botsetup.py to fully utilize API with @bot... methods, this will also allow use of dynamic prefixes
+  - Setup dynamic prefixes (see one above)
 '''
 
 load_dotenv()
@@ -199,14 +202,24 @@ def constr_help_page():
     return embed_var
 
 
-def constr_help_cmd(cmd):
+def constr_help_cmd(cmd, guild_id):
     doc = db_manager.get_single_help(cmd)
     if doc is None:
         return None
     # embed_var = discord.Embed(title='Marvel Quotes Bot', description='\u200b', color=COLOR)
     embed_var = discord.Embed(title=cmd, description=doc['details'], color=COLOR)
     # embed_var.add_field(name=cmd, value=doc['details'], inline=False)
+    try:
+        embed_var.add_field(name='Default Permissions', value=doc['default'], inline=False)
+    except KeyError:
+        pass
     embed_var.add_field(name='Use', value=doc['parameters'])
+
+    if doc['group'] == 'Universe Management':
+        embed_var.add_field(name='Permission', value=perms.get_perms(guild_id, 'universe'), inline=True)
+    elif doc['command'] == 'exclude' or doc['command'] == 'perms':
+        embed_var.add_field(name='Permission', value=perms.get_perms(guild_id, doc['command']), inline=True)
+
     return embed_var
 
 
@@ -233,9 +246,10 @@ def constr_about_embed(args):
 
 
 ''' TODO: db_manager function '''
-def constr_about_bot():
-    print('Nothing yet')
-    about_bot = db_manager.get_about_bot()
+async def constr_about_bot():
+    pass
+    # print('Nothing yet')
+    # about_bot = db_manager.get_about_bot()
 
 
 
@@ -361,7 +375,7 @@ async def on_message(message):
             await message.channel.send(embed=help_em)
 
         else:
-            help_em = constr_help_cmd(args)
+            help_em = constr_help_cmd(args, guild_id)
             if help_em is None:
                 await message.channel.send('Invalid argument')
             else:
@@ -372,7 +386,8 @@ async def on_message(message):
     # TODO: default about case should link to info
     elif command == 'about':
         if args == '':  # TODO: default case SHOULD INSTEAD link to -mqb info command
-            about_bot = constr_about_bot()
+            # about_bot = constr_about_bot()
+            await message.channel.send('Join the MQB discord server to make suggestions, report any issues, and submit your own quotes!\nhttps://discord.gg/d3q9jmxnuh')
         else:
             about_em = constr_about_embed(args)
             if about_em is not None:
@@ -418,12 +433,13 @@ async def on_message(message):
                 cmd = full_args[1].strip()
                 if cmd == '':   # weird bug where 'perms' is replaced by an empty string
                     cmd = 'perms'
-                role = full_args[2]
+                role = int(full_args[2][3:-1])
+                print('role = ', role)
                 if message.guild.get_role(role) is None:
                     await message.channel.send('Invalid Role')
                 else:
                     perms.set_perms(message.guild, cmd, role)
-                    await message.channel.send('Permission for command {0} set to {1}'.format(cmd, role))
+                    await message.channel.send('Permission for command {0} set to {1}'.format(cmd, '<@&'+str(role)+'>'))
         else:
             await message.channel.send('You do not have permission to use this command')
     

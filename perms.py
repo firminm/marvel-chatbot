@@ -10,6 +10,8 @@ from discord.ext.commands import has_permissions
   Permissions CAN ONLY BE SET ON Universe Management commands, the exclude command, and the perms command
   Stores set permissions in local dict to increase speed of role checking
   Note - Local data wiped on function termination which is why both the collection and local data is updated on each set/reset call
+
+  TODO: make reset_perms() accept a command argument
 '''
 
 perms_dict = {}     # Keys = guild IDs, values = list/array of role IDs
@@ -33,12 +35,12 @@ def establish_perms():
     Usage - is_XXX set to True for corresponding command call in botsetup.py
 '''
 def check_perms(guild_id, user, is_uvm=False, is_excl=False, is_perms=False):
-    if user.guild_permissions.administrator:  # Admins have access to all commands
-        print('User passed permissions via admin')
+    if user.guild_permissions.kick_members:  # Admins have access to all commands
+        # print('User passed permissions via manage_role permission')
         return True
 
     global perms_dict
-    print('ENTERED PERMS CHECK')
+    # print('ENTERED PERMS CHECK')
 
     if is_uvm == True:
         cmd = UNIVERSE_MGMT
@@ -57,14 +59,10 @@ def check_perms(guild_id, user, is_uvm=False, is_excl=False, is_perms=False):
     
     # Now check if the user has these roles
     # has_role = user.has_role(role)
-    print('role being looked for:', role)
     for item in user.roles:
-        print('current roll: ', item.id)
         # if '<@&'+str(item.id)+'>' == role:    # Removed as set_perms now excludes chars 0-2 & -1
         if str(item.id) == role:
-            print('User has rol! continue')
             return True
-    print('user does not have roll :(')
     return False
     # print('has_role = {0}, type = {1}'.format(has_role, type(has_role)))
     # return has_role
@@ -72,11 +70,10 @@ def check_perms(guild_id, user, is_uvm=False, is_excl=False, is_perms=False):
 
 ''' Checks user's perms against default'''
 def check_default(user, cmd):
-    print('entered check_default')
     if cmd == UNIVERSE_MGMT:   # Default for universe management is @everyone
         return True
     else:                       # Default for exclusion and setting permissions is those who are able to manage the server
-        return user.guild_permissions.manage_channels
+        return user.guild_permissions.manage_roles
 
 
 ''' Sets permission for a command to a roll '''
@@ -85,7 +82,7 @@ def set_perms(guild, command, role):
     cmd_index = get_index_from_str(command)
     if cmd_index == -1: # not a valid command
         return False
-    db_manager.set_perms(guild.id, cmd_index, role[3:-1])
+    db_manager.set_perms(guild.id, cmd_index, role)          #role[3:-1])
     perms_dict[guild.id][cmd_index] = role
 
 
@@ -102,7 +99,20 @@ def reset_perms(guild_id, command=None):
     db_manager.set_perms(guild_id, reset=True)  # DB reset
     # else:
         # get_index_from_str(command)
-        
+
+def get_perms(guild_id, s):
+    global perms_dict
+    cmd = get_index_from_str(s)
+    perm = perms_dict[guild_id][cmd]
+    if perm != -1 and perm != '-1':
+        return '<@&'+str(perm)+'>'
+    
+    if cmd == UNIVERSE_MGMT:
+        return '@everyone'
+
+    return 'Permissions.manage_roles'
+
+
 
 
 

@@ -34,7 +34,7 @@ def establish_perms():
     Checks if the user can use a command, returns True/False
     Usage - is_XXX set to True for corresponding command call in botsetup.py
 '''
-def check_perms(guild_id, user, is_uvm=False, is_excl=False, is_perms=False):
+def check_perms(guild, user, is_uvm=False, is_excl=False, is_perms=False):
     if user.guild_permissions.kick_members:  # Admins have access to all commands
         # print('User passed permissions via manage_role permission')
         return True
@@ -52,18 +52,25 @@ def check_perms(guild_id, user, is_uvm=False, is_excl=False, is_perms=False):
         print('ERROR: no command type given in check_perms()')
         return False
     
-    role = perms_dict[guild_id][cmd]    # immediately indexes role
+    role_id = perms_dict[guild.id][cmd]    # immediately indexes role
     
-    if role == -1:    # Specific roles have not been set, check via default
+    if role_id == -1:   # Specific roles have not been set, check via default
         return check_default(user, cmd)
+    elif role_id == 0:  # @everyone case
+        return True
     
     # Now check if the user has these roles
     # has_role = user.has_role(role)
-    for item in user.roles:
+    role = guild.get_role(role_id)
+    if role in user.roles:
+        return True
+    else:
+        return False
+    # for item in user.roles:
         # if '<@&'+str(item.id)+'>' == role:    # Removed as set_perms now excludes chars 0-2 & -1
-        if str(item.id) == role:
-            return True
-    return False
+        # if str(item.id) == role:
+            # return True
+    # return False
     # print('has_role = {0}, type = {1}'.format(has_role, type(has_role)))
     # return has_role
 
@@ -104,11 +111,11 @@ def get_perms(guild_id, s):
     global perms_dict
     cmd = get_index_from_str(s)
     perm = perms_dict[guild_id][cmd]
-    if perm != -1 and perm != '-1':
+    if perm != -1 and perm != 0:
         return '<@&'+str(perm)+'>'
-    
-    if cmd == UNIVERSE_MGMT:
+    elif perm == 0 or cmd == UNIVERSE_MGMT:
         return '@everyone'
+
 
     return 'Permissions.manage_roles'
 

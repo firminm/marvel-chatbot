@@ -2,7 +2,7 @@
 from discord import guild
 import pymongo, os
 from dotenv import load_dotenv
-from bson.son import SON
+from bson.objectid import ObjectId
 
 load_dotenv()
 DB_CLIENT = os.getenv('DB_CLIENT')
@@ -13,14 +13,26 @@ QUOTES_DB   = DB['all_marvel_quotes']
 UNIVERSE_DB = DB['all_universes']
 CHARS_DB    = DB['all_characters']
 GUILDS_DB   = DB["guilds"]
+MCU_DB      = DB['mcu_quotes']
+ALOM          = ObjectId('60f98a68b4f845a1a207b844')
 
-def add_guild(guild_id, universe_list=None):
-    universes = []
-    if universe_list is not None:
-        for univ in universe_list:
-            universes.append(univ)
-    GUILDS_DB.insert_one({'_id': guild_id, 'universes': universes, 'used_quotes': [], 'exclusion': False, 'perms': [-1, -1, -1]})
 
+def foo():
+    QUOTES_DB.update_many({'Suffix': ''}, {'$set': {'Suffix': None}})
+
+
+
+def add_guild(guild):
+    try:
+        members = guild.member_count
+        GUILDS_DB.insert_one({'_id': guild.id, 'universes': [], 'used_quotes': [], 'mcu_quotes': [], 'exclusion': False, 'perms': [-1, -1, -1], 'name': guild.name, 'members': members})
+        GUILDS_DB.update_one({'_id': ALOM}, { '$inc': {'servers': 1, 'members': members } } )
+
+    except pymongo.errors.DuplicateKeyError:
+        remove_all_universes(guild)
+        print('bot re-added to', guild.name)
+    alpha= GUILDS_DB.find_one({'_id': ALOM})
+    return (alpha['servers'], alpha['members'])
 
 ''' Returns dictionary of perms for use in perms.py '''
 def get_all_perms():
@@ -36,7 +48,9 @@ def get_all_perms():
     return dict
 
 
-''' Sets one specific value '''
+''' Sets one specific value 
+    Called by perms.py
+'''
 def set_perms(guild_id, command_index=0, role=None, reset = False):
     if reset:
         GUILDS_DB.update(
@@ -79,16 +93,17 @@ def get_all_universes(page=0):
 '''
     Returns list of all universes
 '''
-def get_enabled_universes(guild_id):
-    the_guild = GUILDS_DB.find_one({ '_id': guild_id })
+def get_enabled_universes(guild):
+    the_guild = GUILDS_DB.find_one({ '_id': guild.id })
     if the_guild is None:
-        add_guild(guild_id)
-        get_enabled_universes(guild_id)
+        add_guild(guild)
+        get_enabled_universes(guild)
     
     univ_tupp = []
     univ_name = ''
     univ_info = ''
-    cursor = UNIVERSE_DB.find({'name': the_guild['universes']})
+    if the_guild['universes'] is None:
+        return None
     for universe in the_guild['universes']:
         
         try:
@@ -167,7 +182,7 @@ def get_single_help(cmd):
 
 ''' Enables all universes for selected guild '''
 def enable_all_universes(guild_id):
-    ao = GUILDS_DB.find_one({ 'alpha': 'omega' })   # Establish master universe list
+    ao = GUILDS_DB.find_one({ '_id': ALOM })   # Establish master universe list
     GUILDS_DB.update_one(
         { '_id': guild_id },
         { '$addToSet': { 'universes': { '$each': ao['universes']}}}
@@ -180,34 +195,44 @@ def enable_all_universes(guild_id):
     Used by add_universe(), remove_universe(), and get_quote_from_arg()
 '''
 def format_univ(universe):
-    is_valid_univ = UNIVERSE_DB.find_one({'name': universe})
-    univ_f = universe
-
-    if is_valid_univ is not None and UNIVERSE_DB.find_one({'alt': 'Earth-'+universe}) is not None:
-        univ_f = 'Earth-' + universe
-    elif is_valid_univ is None and len(universe) > 1:
-        univ_f = universe[0].upper() + universe[1:].lower()
-        is_valid_univ = UNIVERSE_DB.find_one({'name': univ_f})
-    if is_valid_univ is None and len(universe) > 5:
-        is_valid_univ = UNIVERSE_DB.find_one({'name': universe[5:]})    #earthXXXX case
-        univ_f = 'Earth-' + universe[5:]
-    if is_valid_univ is None and len(universe) > 6:
-        is_valid_univ = UNIVERSE_DB.find_one({'name': universe[6:]})    #earth-XXXX case
-        univ_f = 'Earth-' + universe[6:]
-    
-    
-    if is_valid_univ is None:
+    is_valid_univ = UNIVERSE_DB.find_one({'alt': universe[0].upper()+universe[1:]})
+    univ_f = universe[0].upper()+universe[1:]
+    if is_valid_univ is not None:
+        return univ_f
+    elif UNIVERSE_DB.find_one({'name': universe}) is not None and UNIVERSE_DB.find_one({'alt': 'Earth-'+universe}) is not None:
+        return 'Earth-' + universe
+    elif UNIVERSE_DB.find_one({'name': universe}):
+        return universe
+    elif UNIVERSE_DB.find_one({'alt': 'Earth-'+universe[5:]}):
+        return 'Earth-' + universe[5:]
+    else:
         return None
-    return univ_f
+
+    # if is_valid_univ is None and UNIVERSE_DB.find_one({'alt': 'Earth-'+universe}) is not None:
+    #     univ_f = 'Earth-' + universe
+    # elif is_valid_univ is None and len(universe) > 1:
+    #     univ_f = universe[0].upper() + universe[1:].lower()
+    #     is_valid_univ = UNIVERSE_DB.find_one({'name': univ_f})
+    # if is_valid_univ is None and len(universe) > 5:
+    #     is_valid_univ = UNIVERSE_DB.find_one({'name': universe[5:]})    #earthXXXX case
+    #     univ_f = 'Earth-' + universe[5:]
+    # if is_valid_univ is None and len(universe) > 6:
+    #     is_valid_univ = UNIVERSE_DB.find_one({'name': universe[6:]})    #earth-XXXX case
+    #     univ_f = 'Earth-' + universe[6:]
+    
+    
+    # if is_valid_univ is None:
+    #     return None
+    # return univ_f
 
 
 '''
     adds to guild's active uiverses
      - Can take universe as an array or string
 '''
-def add_universe(universe, guild_id):
+def add_universe(universe, guild):
     if universe == 'all':               # If the enable all command was given
-        enable_all_universes(guild_id)
+        enable_all_universes(guild.id)
         return universe
 
     # Check to see if universe is valid
@@ -216,7 +241,7 @@ def add_universe(universe, guild_id):
         return None
     
     GUILDS_DB.update(
-        { '_id': guild_id },
+        { '_id': guild.id },
         { '$addToSet': { 'universes': univ_f } }
     )
     return univ_f
@@ -225,23 +250,23 @@ def add_universe(universe, guild_id):
 '''
     Removes ALL universes from server's enabled universe list
 '''
-def remove_all_universes(guild_id):
-    if GUILDS_DB.find_one({'_id': guild_id}) is not None:       # I want to remove this to make it faster... should I add a -mqb setup command?
+def remove_all_universes(guild):
+    if GUILDS_DB.find_one({'_id': guild.id}) is not None:       # I want to remove this to make it faster... should I add a -mqb setup command?
         GUILDS_DB.update(
-                { '_id': guild_id },
+                { '_id': guild.id },
                 { '$set': { 'universes': [] }}
             )
         return True
     else:   # guild has not been established yet
-        add_guild(guild_id)
-        remove_all_universes(guild_id)
+        add_guild(guild)
+        remove_all_universes(guild)
         return True
 
 
 '''
     Removes specific universe from server's enabled universe list
 '''
-def remove_universe(universe, guild_id):
+def remove_universe(universe, guild):
     # Check to see if universe is valid
     univ_f = format_univ(universe)
     if univ_f is None:
@@ -249,7 +274,7 @@ def remove_universe(universe, guild_id):
     
 
     GUILDS_DB.update(
-        { '_id': guild_id},
+        { '_id': guild.id},
         { '$pull': { 'universes': univ_f } }
     )
     return univ_f
@@ -276,7 +301,7 @@ def list_from_cursor(cursor):
         try:
             quo_char_univ_link.append(item['Thumbnail'])
         except KeyError:
-            print('Thumbnail value = Null')
+            pass
     return quo_char_univ_link
 
 '''
@@ -291,17 +316,19 @@ def get_quote_from_arg(args, guild_id):
     enabled_univ = guild_info['universes']
 
     # Check if the character exists
-    if QUOTES_DB.find_one({ 'Character': args}) is not None:
+    if QUOTES_DB.find_one({ 'Character': { '$regex': args, '$options': 'i'}}) is not None:
         if exclusion:
             items = QUOTES_DB.aggregate([   
-                { '$match': { '$and': [{'Character': args}, {'Universe': {'$in': enabled_univ}}]}},   # Exclusive to enabled universes
+                { '$match': { '$and': [
+                    {'Character': { '$regex': args, '$options': 'i'}}, {'Universe': {'$in': enabled_univ}}]}},   # Exclusive to enabled universes
                 { "$sample": {"size": 1}}
         ])
         else:
             items = QUOTES_DB.aggregate([   
-                { '$match': {'Character': args}},
+                { '$match': {'Character': { '$regex': args, '$options': 'i'}}},
                 { "$sample": {"size": 1}}
             ])
+
 
     else:   # Now check if args is a universe param
         # Check to see if universe is valid
@@ -311,33 +338,31 @@ def get_quote_from_arg(args, guild_id):
 
         # Does not check for exclusion as user is specifically requesting this universe
         items = QUOTES_DB.aggregate([   
-                { "$match": {"Universe": { '$in': univ_f}}},
+                { "$match": {"Universe": { '$regex': '^'+univ_f+'$', '$options': 'i'}}},
                 { "$sample": {"size": 1}}
         ])
-    quo_char_univ_link = list_from_cursor(items)
 
-
-    if len(quo_char_univ_link) == 0:
-        return None
-
-    GUILDS_DB.update(
+    # Returns quote document in the weirdest way possible    
+    for item in items:
+        GUILDS_DB.update(
             { '_id': guild_id },
-            { '$push': { 'used_quotes': quo_char_univ_link[4] } }
+            { '$push': { 'used_quotes': item['_id'] } }
         )
-   
-    return quo_char_univ_link
+        return item # basically doing list(items)[0] but that's throwing an OOB excption, so we do this instead :)
 
 
 ''' Get quote from ENTIRE database (no exclusion) '''
 def get_random_quote(guild_id):
     items = QUOTES_DB.aggregate([{ "$sample": {"size": 1}}])
-    quo_char_univ_link = list_from_cursor(items)
+        # quo_char_univ_link = list_from_cursor(items)
     # add quote to list of quotes pulled
+    item = list(items)[0]
+
     GUILDS_DB.update(
             { '_id': guild_id },
-            { '$push': { 'used_quotes': quo_char_univ_link[4] } }
+            { '$push': { 'used_quotes': item['_id'] } }
         )
-    return quo_char_univ_link
+    return item
 
 
 '''
@@ -347,10 +372,10 @@ def get_random_quote(guild_id):
       - Fix adding server document to database
       - Ensure universe search is working correctly
 '''
-def get_quote(guild_id):
-    guild_data = GUILDS_DB.find_one({'_id': guild_id})
+def get_quote(guild):
+    guild_data = GUILDS_DB.find_one({'_id': guild.id})
     if guild_data is None:      # Guild has not been added to system, add it with default values, return None
-        add_guild(guild_id)
+        add_guild(guild)
         return None
     
     universe_list = guild_data['universes']
@@ -365,15 +390,55 @@ def get_quote(guild_id):
             { "$match": {"Universe": { "$in": universe_list }}},
             { "$sample": {"size": 1}}
         ])
-        
-    quo_char_univ_link = list_from_cursor(items)
+    
+    item = list(items)[0]
     GUILDS_DB.update(
-            { '_id': guild_id },
-            { '$push': { 'used_quotes': quo_char_univ_link[4] } }
+            { '_id': guild.id },
+            { '$push': { 'used_quotes': item['_id'] } }
         )
     
-    return quo_char_univ_link
+    return item
 
+
+
+'''
+    Gets quote from MCU database
+    TODO: integrate database with QUOTES_DB, incorporate with regular quote command
+'''
+def get_mcu_quote(guild, args=None):
+    if args is None:
+        items = MCU_DB.aggregate([{'$sample': {'size': 1}}])
+    else:
+        # items = MCU_DB.aggregate([      # Find random document where keys (name, person) match args (case insensitive)
+        #     { '$match': { '$or': [
+        #         {'name': {'$regex': args, '$options': 'i'}}, {'person': {'$regex': args, '$options': 'i'}}]}}, 
+        #     { '$sample': {'size': 1}}
+        # ])
+        items = MCU_DB.aggregate([
+            { "$match": {'name': {'$regex': args, '$options': 'i'}}},
+            { "$sample": {"size": 1} }
+        ])
+
+    item = list(items)
+    # If still none, search instead thru person tag
+    if len(item) == 0:
+        items = MCU_DB.aggregate([      # Note: I could not get the or to work in aggregation
+            { "$match": {'person': {'$regex': args, '$options': 'i'}}},
+            { "$sample": {"size": 1} }
+        ])
+        item = list(items)
+        
+    # Recall aggregation returns a cursor:
+    if len(item) == 0:
+        return None
+    
+    item = item[0]
+    GUILDS_DB.update_one(
+        {'_id': guild.id},
+        {'$push': { 'mcu_quotes': item['_id'] } }
+    )
+
+    return item
     
 
 '''
@@ -384,8 +449,9 @@ def get_quote(guild_id):
 '''
 def get_about(args):
     info_list = []
-    char_doc = CHARS_DB.find_one({'name': args})
+    char_doc = CHARS_DB.find_one({'name': { '$regex': args, '$options': 'i'}})  # case insensity search for characters whose names include args, use '^args$' for exact match
     if char_doc is not None:
+        return ('c', char_doc)
         info_list.append(char_doc['name'])
         info_list.append(char_doc['references'])
         info_list.append(char_doc['percent'])
@@ -404,6 +470,7 @@ def get_about(args):
 
 
     if univ_doc is not None:
+        return ('u', univ_doc)
         try:        # Because I messed up setting up the database and don't feel like fixing it
             info_list.append(univ_doc['alt'])
         except KeyError:
@@ -438,3 +505,13 @@ def toggle_exclusion(guild_id, args):
     else:
         io_bool = False
     GUILDS_DB.update_one({'_id': guild_id}, {'$set': {'exclusion': io_bool}})
+
+
+def check_exclusion(guild):
+    excl = GUILDS_DB.find_one({'_id': guild.id})['exclusion']
+    if excl == True:
+        return 'on'
+    elif excl == False:
+        return 'off'
+    else:
+        return '[ERROR: server has not been properly added, use `-mqb elist` to fix]'

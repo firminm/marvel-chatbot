@@ -294,23 +294,35 @@ async def constr_about_bot():
 
 
 
+'''
+    Called when bot is added to a new guild, adds guild to guild database
+'''
 @client.event
 async def on_guild_join(guild):
     print('Joining guild {0}, \tID = {1}'.format(guild, guild.id))
     num_servers = db_manager.add_guild(guild=guild)
+    perms.add_guild(guild.id)
+
     bot_joins = client.get_channel(877640978700304455)
 
-    join_embed = discord.Embed(title='Joined '+guild.name, description='ID: '+str(guild.id), color=COLOR)
-    join_embed.add_field(name='Members', value=guild.member_count)
+    # Creates embed to send in dev channel to notify me of new joins
+    join_embed = discord.Embed(title='Joined '+guild.name + ' ID: ' + str(guild.id), description=guild.id, color=COLOR)
+    join_embed.add_field(name='Members', value=str(guild.member_count) )
     join_embed.add_field(name='Total Servers', value=num_servers[0], inline=True)
     join_embed.add_field(name='Total Members', value=num_servers[1], inline=True)
     await bot_joins.send(embed=join_embed)
+    
+    
 
 @client.event
 async def on_ready():
     perms.establish_perms()     # Establishes local dictionary of perms
-    db_manager.foo()
+    await client.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="-mqb help"))
     print('Logged in as {0.user}'.format(client))
+
+    # db_manager.count_guilds()
+    db_manager.check_guilds(client.guilds)  # Checks if any new guilds have been added while offline
+
 
 
 

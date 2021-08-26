@@ -17,15 +17,14 @@ MCU_DB      = DB['mcu_quotes']
 ALOM          = ObjectId('60f98a68b4f845a1a207b844')
 
 
-def foo():
-    QUOTES_DB.update_many({'Suffix': ''}, {'$set': {'Suffix': None}})
+
 
 
 
 def add_guild(guild):
     try:
         members = guild.member_count
-        GUILDS_DB.insert_one({'_id': guild.id, 'universes': [], 'used_quotes': [], 'mcu_quotes': [], 'exclusion': False, 'perms': [-1, -1, -1], 'name': guild.name, 'members': members})
+        GUILDS_DB.insert_one({'_id': guild.id, 'name': guild.name, 'members': members, 'universes': [], 'exclusion': False, 'active': True, 'perms': [-1, -1, -1], 'used_quotes': [], 'mcu_quotes': [],})
         GUILDS_DB.update_one({'_id': ALOM}, { '$inc': {'servers': 1, 'members': members } } )
 
     except pymongo.errors.DuplicateKeyError:
@@ -33,6 +32,21 @@ def add_guild(guild):
         print('bot re-added to', guild.name)
     alpha= GUILDS_DB.find_one({'_id': ALOM})
     return (alpha['servers'], alpha['members'])
+
+
+
+'''
+    Checks to see if bot has been added to any new guilds while offline
+    Called by botsetup.on_ready()
+'''
+def check_guilds(guilds):
+    GUILDS_DB.update_many({}, {'$set': {'active': False}})
+    for guild in guilds:
+        if GUILDS_DB.find_one({'_id': guild.id}) is None:
+            guilds_data = add_guild(guild)
+            print('Joined server {0}, ID: {1},\tWhile offline'.format(guild.name, guild.id))
+        else:
+            GUILDS_DB.update_one({'_id': guild.id}, {'$set': {'active': True}})
 
 ''' Returns dictionary of perms for use in perms.py '''
 def get_all_perms():
@@ -46,6 +60,20 @@ def get_all_perms():
             pass
 
     return dict
+
+
+'''
+    Dev method, call on_ready() when you want to ensure that alpha:omega contains an accurate count of guilds and members
+'''
+def count_guilds():
+    GUILDS_DB.update_one({'_id': ALOM}, {'$set': {'servers': 0, 'members': 0}})
+    cursor = GUILDS_DB.find({'members': {'$exists': True}})
+    total_members = 0
+    total_guilds = 0
+    for doc in cursor:
+        total_guilds  += 1
+        total_members += doc['members']
+    GUILDS_DB.update_one({'_id': ALOM}, {'$set': {'servers': total_guilds, 'members': total_members}})
 
 
 ''' Sets one specific value 

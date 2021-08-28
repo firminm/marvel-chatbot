@@ -306,14 +306,15 @@ async def on_guild_join(guild):
     bot_joins = client.get_channel(877640978700304455)
 
     # Creates embed to send in dev channel to notify me of new joins
-    join_embed = discord.Embed(title='Joined '+guild.name + ' ID: ' + str(guild.id), description=guild.id, color=COLOR)
-    join_embed.add_field(name='Members', value=str(guild.member_count) )
+    join_embed = discord.Embed(title='Joined '+guild.name, description='ID:'+ str(guild.id), color=COLOR)
+    join_embed.add_field(name='Members', value=str(guild.member_count), inline=False )
     join_embed.add_field(name='Total Servers', value=num_servers[0], inline=True)
     join_embed.add_field(name='Total Members', value=num_servers[1], inline=True)
     await bot_joins.send(embed=join_embed)
-    
-    
 
+
+
+    
 @client.event
 async def on_ready():
     perms.establish_perms()     # Establishes local dictionary of perms
@@ -502,7 +503,9 @@ async def on_message(message):
         elif valid_perms:
             full_args = args.split(' ')
             action = full_args[0]       # set
-            if action == 'set':
+            if action == 'set' and len(full_args) <= 1:
+                await message.channel.send("Invalid argument")
+            elif action == 'set':
                 cmd = full_args[1].strip()
                 if cmd == '':   # weird bug where 'perms' is replaced by an empty string
                     cmd = 'perms'
@@ -521,6 +524,7 @@ async def on_message(message):
                         await message.channel.send('Permission for command {0} set to @ everyone'.format(cmd))
                     else:
                         await message.channel.send('Invalid Role')
+        
 
         else:
             await message.channel.send('You do not have permission to use this command')

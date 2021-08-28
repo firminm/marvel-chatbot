@@ -121,6 +121,11 @@ def get_perms(guild_id, s):
 
 
 
+def add_guild(guild_id):
+    global perms_dict
+    perms_dict[guild_id] = [-1, -1, -1]
+
+
 
 
 

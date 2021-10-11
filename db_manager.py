@@ -34,6 +34,9 @@ def add_guild(guild):
     return (alpha['servers'], alpha['members'])
 
 
+def remove_guild(guild):
+    GUILDS_DB.delete_one({'_id': guild.id})
+
 
 '''
     Checks to see if bot has been added to any new guilds while offline

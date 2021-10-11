@@ -138,3 +138,7 @@ def get_index_from_str(str):
         return CHANGE_PERMS
     else:
         return -1
+
+
+def remove_guild(guild):
+    del perms_dict[guild.id]

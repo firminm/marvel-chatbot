@@ -1,3 +1,4 @@
+from re import L
 import discord, os, random, db_manager, perms
 from asyncio import TimeoutError
 from discord import channel
@@ -26,6 +27,17 @@ TOTAL_UNIVERSES = 528       # global holding max number of universes
 COLOR = 0x893a94            # global holding embed color
 EMBED_PAGE = 1
 
+# TODO: Replace with JSON reading
+suggests = {
+    "spider man": "Peter Parker",
+    "spider-man": "Peter Parker",
+    "spiderman": "Peter Parker",
+    "iron man": "Tony Stark",
+    "ironman": "Tony Stark",
+    "steve rogers": "Steven Rogers",
+    "steve rodgers": "Steven Rogers",
+    "steven rodgers": "Steven Rogers"
+}
 
 
 async def set_pfp():
@@ -325,6 +337,12 @@ async def on_ready():
     db_manager.check_guilds(client.guilds)  # Checks if any new guilds have been added while offline
 
 
+@client.event
+async def on_guild_remove(guild): #when the bot is removed from the guild
+    db_manager.remove_guild(guild)
+    perms.remove_guild(guild)
+    print('Removed from guild {0}, ID = {1}'.format(guild.name, guild.id))
+
 
 
 @client.event
@@ -347,6 +365,13 @@ async def on_message(message):
         return
     # message is now ensured to start with -mq and be a command
     guild_id = message.guild.id
+    # if command and args:
+    print(message.guild.name+':   ', command, args)
+    # elif command:
+        # print(message.guild.name+':   '+ command + 'noArgs')
+    # else:
+        # print(message.guild.name+':   ', message + 'noCmd, noArgs')
+
 
 
     # Fetch random quote from universe specified or if none, from the list of enabled universes
@@ -357,12 +382,14 @@ async def on_message(message):
             quote_doc = db_manager.get_random_quote(guild_id)
 
         else:                                                           # Specific universe called in args
+            if args in suggests:        # Replaces improperly used keywords
+                args = suggests[args]
             quote_doc = db_manager.get_quote_from_arg(args, guild_id)
         
         if quote_doc is None and (args is None or args == ''):          # Quote returned None when called with no extra arguments -> no universe list for guild 
             await message.channel.send('No universes to pull from.\nType \"-mqb add <universe>\" to add a specific universe or type \"-mqb add all\" to add all')
         elif quote_doc is None:                                         # Quote returned None when a universe was specified
-            await message.channel.send('Universe/Character not found.\nCheck exclusion setting, or use \"elist\" or \"clist\" commands for keywords')
+            await message.channel.send('Universe/Character not found, try using the character\'s real name.')
         else:   # Quote exists, send it.
             quote_em = constr_quote(quote_doc)
             await message.channel.send(embed=quote_em)

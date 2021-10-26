@@ -43,13 +43,28 @@ def remove_guild(guild):
     Called by botsetup.on_ready()
 '''
 def check_guilds(guilds):
+    originals = GUILDS_DB.find_one({'_id': ALOM})
+    orig_members = originals['members']
+    orig_servers = originals['servers']
+
+    active_servers = 0
+    active_members = 0
     GUILDS_DB.update_many({}, {'$set': {'active': False}})
     for guild in guilds:
         if GUILDS_DB.find_one({'_id': guild.id}) is None:
             guilds_data = add_guild(guild)
             print('Joined server {0}, ID: {1},\tWhile offline'.format(guild.name, guild.id))
         else:
-            GUILDS_DB.update_one({'_id': guild.id}, {'$set': {'active': True}})
+            GUILDS_DB.update_one({'_id': guild.id}, {'$set': {'active': True, 'members': guild.member_count}})
+        
+        active_members += guild.member_count
+        active_servers += 1
+    
+    GUILDS_DB.update_one({'alpha':'omega'}, {'$set': {'servers': active_servers, 'members': active_members}})
+    if active_servers - orig_servers >= 0:
+        print('In {0} servers, {1} members.\nJoined {2} servers, {3} new members'.format(active_servers, active_members, active_servers - orig_servers, active_members - orig_members))
+    else:
+        print('Left {0} servers, {1} less members'.format(orig_servers - active_servers, orig_members - active_members))
 
 ''' Returns dictionary of perms for use in perms.py '''
 def get_all_perms():

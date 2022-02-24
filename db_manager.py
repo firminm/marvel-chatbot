@@ -52,7 +52,7 @@ def check_guilds(guilds):
     GUILDS_DB.update_many({}, {'$set': {'active': False}})
     for guild in guilds:
         if GUILDS_DB.find_one({'_id': guild.id}) is None:
-            guilds_data = add_guild(guild)
+            add_guild(guild)
             print('Joined server {0}, ID: {1},\tWhile offline'.format(guild.name, guild.id))
         else:
             GUILDS_DB.update_one({'_id': guild.id}, {'$set': {'active': True, 'members': guild.member_count}})
@@ -74,7 +74,6 @@ def get_all_perms():
         try:
             dict[doc['_id']] = doc['perms']
         except KeyError:    # Occurs on alpha:omega, beta:gamma, and theta:iota fake/setup guilds
-            # print('KeyError on ', doc['_id'])
             pass
 
     return dict

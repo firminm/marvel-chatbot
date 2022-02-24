@@ -315,9 +315,14 @@ async def on_guild_join(guild):
     num_servers = db_manager.add_guild(guild=guild)
     perms.add_guild(guild.id)
 
-    bot_joins = client.get_channel(877640978700304455)
+    for channel in guild.text_channels:
+        if channel.permissions_for(guild.me).send_messages:
+            await channel.send('Thanks for adding MQB Quotes to your server!\nFor the best experience, please ensure that **all permissions** requested are granted.To get started, we recommend using `-mqb add all` and `-mqb quote`')
+            break
+
 
     # Creates embed to send in dev channel to notify me of new joins
+    bot_joins = client.get_channel(877640978700304455)
     join_embed = discord.Embed(title='Joined '+guild.name, description='ID:'+ str(guild.id), color=COLOR)
     join_embed.add_field(name='Members', value=str(guild.member_count), inline=False )
     join_embed.add_field(name='Total Servers', value=num_servers[0], inline=True)
@@ -339,9 +344,11 @@ async def on_ready():
 
 @client.event
 async def on_guild_remove(guild): #when the bot is removed from the guild
-    db_manager.remove_guild(guild)
-    perms.remove_guild(guild)
-    print('Removed from guild {0}, ID = {1}'.format(guild.name, guild.id))
+    # Very odd error, bot is marked as removed from this guild on each startup
+    if guild.id != 901538946222293002:
+        db_manager.remove_guild(guild)
+        perms.remove_guild(guild)
+        print('Removed from guild {0}, ID = {1}'.format(guild.name, guild.id))
 
 
 
@@ -373,194 +380,200 @@ async def on_message(message):
         # print(message.guild.name+':   ', message + 'noCmd, noArgs')
 
 
+    try:
+        # Fetch random quote from universe specified or if none, from the list of enabled universes
+        if command is None or command == '' or (len(command) >=5 and command[:5] == 'quote'):    
+            if args is None or args == '':                                  # When args is empty, fetch random quote 
+                quote_doc = db_manager.get_quote(message.guild)
+            elif args == 'all':                                             # Used keyword 'all', pull random quote from all
+                quote_doc = db_manager.get_random_quote(guild_id)
 
-    # Fetch random quote from universe specified or if none, from the list of enabled universes
-    if command is None or command == '' or (len(command) >=5 and command[:5] == 'quote'):    
-        if args is None or args == '':                                  # When args is empty, fetch random quote 
-            quote_doc = db_manager.get_quote(message.guild)
-        elif args == 'all':                                             # Used keyword 'all', pull random quote from all
-            quote_doc = db_manager.get_random_quote(guild_id)
-
-        else:                                                           # Specific universe called in args
-            if args in suggests:        # Replaces improperly used keywords
-                args = suggests[args]
-            quote_doc = db_manager.get_quote_from_arg(args, guild_id)
-        
-        if quote_doc is None and (args is None or args == ''):          # Quote returned None when called with no extra arguments -> no universe list for guild 
-            await message.channel.send('No universes to pull from.\nType \"-mqb add <universe>\" to add a specific universe or type \"-mqb add all\" to add all')
-        elif quote_doc is None:                                         # Quote returned None when a universe was specified
-            await message.channel.send('Universe/Character not found, try using the character\'s real name.')
-        else:   # Quote exists, send it.
-            quote_em = constr_quote(quote_doc)
-            await message.channel.send(embed=quote_em)
-
-    elif command == 'all':
-        quote_doc = db_manager.get_random_quote(guild_id)
-        await message.channel.send(embed=constr_quote(quote_doc))
-
-    # Adds specified universe to server's active universes
-    elif command == 'add':
-        if perms.check_perms(message.guild, message.author, is_uvm=True) == False:
-            await message.channel.send('You do not have permission to use this command')
-
-        else:
-            success = db_manager.add_universe(args, message.guild)
-            if success is not None and args != 'all':
-                reply = 'Universe ' + success + ' successfully added'
-            elif success is not None:   # add all case
-                reply = 'All universes successfully added'
-            else:
-                reply = 'Universe ' + args + ' was unable to be added'
-            # reply += db_manager.get_universe_list(guild_id)
-            await message.channel.send(reply)
-    
-    # Removes specified universe from server's active universes
-    elif command == 'remove':
-        if perms.check_perms(message.guild, message.author, is_uvm=True) == False:
-            await message.channel.send('You do not have permission to use this command')
-
+            else:                                                           # Specific universe called in args
+                if args in suggests:        # Replaces improperly used keywords
+                    args = suggests[args]
+                quote_doc = db_manager.get_quote_from_arg(args, guild_id)
             
-        elif args.lower() == 'all':
-            all_removed = db_manager.remove_all_universes(message.guild)
-            if all_removed == True:
-                await message.channel.send('All universes successfully removed')
+            if quote_doc is None and (args is None or args == ''):          # Quote returned None when called with no extra arguments -> no universe list for guild 
+                await message.channel.send('No universes to pull from.\nType \"-mqb add <universe>\" to add a specific universe or type \"-mqb add all\" to add all')
+            elif quote_doc is None:                                         # Quote returned None when a universe was specified
+                await message.channel.send('Universe/Character not found, try using the character\'s real name.')
+            else:   # Quote exists, send it.
+                quote_em = constr_quote(quote_doc)
+                await message.channel.send(embed=quote_em)
+
+        elif command == 'all':
+            quote_doc = db_manager.get_random_quote(guild_id)
+            await message.channel.send(embed=constr_quote(quote_doc))
+
+        # Adds specified universe to server's active universes
+        elif command == 'add':
+            if perms.check_perms(message.guild, message.author, is_uvm=True) == False:
+                await message.channel.send('You do not have permission to use this command')
+
             else:
-                await message.channel.send('Something went wrong. Please make sure to use the \"-mqb\" command if you haven\'t already.')
-        else:
-            success = db_manager.remove_universe(args, message.guild)
-            if success is not None:
-                reply = 'Universe ' + success + ' successfully removed'
-            else:
-                reply = 'Universe ' + args + ' was unable to be removed'
-            # reply += db_manager.get_universe_list(guild_id)
-            await message.channel.send(reply)
-    
-    # Sends list of all universes
-    elif command == 'ulist':
-        ulist = db_manager.get_all_universes(guild_id)
-        await create_embed(ulist, 'All Universes', context=message)
-
-    # Sends list of enabled universes -- can only message 25 universes at a time, awaits "next" command
-    elif command == 'elist':
-        elist = db_manager.get_enabled_universes(message.guild)   # returns complete list of enabled universes
-
-        if elist is None or len(elist) == 0:
-            await message.channel.send('No universes enabled, type \"-mqb add <universe>\" to add a specific universe. Type \"-mqb add all\" to add all')
-        else:
-            await create_embed(elist, 'Enabled Universes', context=message)
-
-    # Sends list of characters    
-    elif command == 'clist':
-        clist = db_manager.get_character_list()
-        await create_embed(clist, 'List of Characters', field_values=False, context=message)
-
-    
-    # MCU quote
-    elif command.lower() == 'mcu':
-        if args is None or args == '':
-            quote_doc = db_manager.get_mcu_quote(message.guild)
-        else:
-            quote_doc = db_manager.get_mcu_quote(message.guild, args)
+                success = db_manager.add_universe(args, message.guild)
+                if success is not None and args != 'all':
+                    reply = 'Universe ' + success + ' successfully added'
+                elif success is not None:   # add all case
+                    reply = 'All universes successfully added'
+                else:
+                    reply = 'Universe ' + args + ' was unable to be added'
+                # reply += db_manager.get_universe_list(guild_id)
+                await message.channel.send(reply)
         
-        if quote_doc is None:
-            await message.channel.send('An error has occured')
-        else:
-            quote_embed = constr_mcu_quote(quote_doc)
-            await message.channel.send(embed=quote_embed)
+        # Removes specified universe from server's active universes
+        elif command == 'remove':
+            if perms.check_perms(message.guild, message.author, is_uvm=True) == False:
+                await message.channel.send('You do not have permission to use this command')
 
-    # Sends first page of help embed... Update so commands are shown within backticks <`command`>
-    # TODO: Don't show information from command list instad show it when command is called as an arg with a help command (also give examples on how to use the command)
-    elif command == 'help':
-        if args == '':
-            help_em = constr_help_page()
-            await message.channel.send(embed=help_em)
-
-        else:
-            help_em = constr_help_cmd(args, guild_id)
-            if help_em is None:
-                await message.channel.send('Invalid argument')
+                
+            elif args.lower() == 'all':
+                all_removed = db_manager.remove_all_universes(message.guild)
+                if all_removed == True:
+                    await message.channel.send('All universes successfully removed')
+                else:
+                    await message.channel.send('Something went wrong. Please make sure to use the \"-mqb\" command if you haven\'t already.')
             else:
+                success = db_manager.remove_universe(args, message.guild)
+                if success is not None:
+                    reply = 'Universe ' + success + ' successfully removed'
+                else:
+                    reply = 'Universe ' + args + ' was unable to be removed'
+                # reply += db_manager.get_universe_list(guild_id)
+                await message.channel.send(reply)
+        
+        # Sends list of all universes
+        elif command == 'ulist':
+            ulist = db_manager.get_all_universes(guild_id)
+            await create_embed(ulist, 'All Universes', context=message)
+
+        # Sends list of enabled universes -- can only message 25 universes at a time, awaits "next" command
+        elif command == 'elist':
+            elist = db_manager.get_enabled_universes(message.guild)   # returns complete list of enabled universes
+
+            if elist is None or len(elist) == 0:
+                await message.channel.send('No universes enabled, type \"-mqb add <universe>\" to add a specific universe. Type \"-mqb add all\" to add all')
+            else:
+                await create_embed(elist, 'Enabled Universes', context=message)
+
+        # Sends list of characters    
+        elif command == 'clist':
+            clist = db_manager.get_character_list()
+            await create_embed(clist, 'List of Characters', field_values=False, context=message)
+
+        
+        # MCU quote
+        elif command.lower() == 'mcu':
+            if args is None or args == '':
+                quote_doc = db_manager.get_mcu_quote(message.guild)
+            else:
+                quote_doc = db_manager.get_mcu_quote(message.guild, args)
+            
+            if quote_doc is None:
+                await message.channel.send('An error has occured')
+            else:
+                quote_embed = constr_mcu_quote(quote_doc)
+                await message.channel.send(embed=quote_embed)
+
+        # Sends first page of help embed... Update so commands are shown within backticks <`command`>
+        # TODO: Don't show information from command list instad show it when command is called as an arg with a help command (also give examples on how to use the command)
+        elif command == 'help':
+            if args == '':
+                help_em = constr_help_page()
                 await message.channel.send(embed=help_em)
 
-
-    # Gives information about the specified universe
-    # TODO: default about case should link to info
-    elif command == 'about':
-        if args == '':  # TODO: default case SHOULD INSTEAD link to -mqb info command
-            # about_bot = constr_about_bot()
-            await message.channel.send('Join the MQB discord server to make suggestions, report any issues, and submit your own quotes!\nhttps://discord.gg/d3q9jmxnuh')
-        else:
-            about_em = constr_about_embed(args)
-            if about_em is not None:
-                await message.channel.send(embed=about_em)
             else:
-                await message.channel.send('Invalid argument')
+                help_em = constr_help_cmd(args, guild_id)
+                if help_em is None:
+                    await message.channel.send('Invalid argument')
+                else:
+                    await message.channel.send(embed=help_em)
 
 
-    
-    # Takes 'used quotes' as args, resets guild's used_quotes to a blank array
-    elif command == 'clear':
-        if perms.check_perms(message.guild, message.author, is_uvm=True) == False:
-            await message.channel.send('You do not have permission to use this command')
-        else:
-            db_manager.clear_used_quotes(guild_id)
-            await message.channel.send('Used quotes cleared')
+        # Gives information about the specified universe
+        # TODO: default about case should link to info
+        elif command == 'about':
+            if args == '':  # TODO: default case SHOULD INSTEAD link to -mqb info command
+                # about_bot = constr_about_bot()
+                await message.channel.send('Join the MQB discord server to make suggestions, report any issues, and submit your own quotes!\nhttps://discord.gg/d3q9jmxnuh')
+            else:
+                about_em = constr_about_embed(args)
+                if about_em is not None:
+                    await message.channel.send(embed=about_em)
+                else:
+                    await message.channel.send('Invalid argument')
 
-    # Toggles quote exclusion on or off... does "-mqb quote Peter Parker" draw from ALL universes, or just those enabled
-    elif command == 'exclude':
-        if args == '':      # No arg, check what exclusion is set to (availible to everyone)
-            await message.channel.send('Exclusion is {0}'.format(db_manager.check_exclusion(message.guild)))
 
-        elif perms.check_perms(message.guild, message.author, is_excl=True) == False:
-            await message.channel.send('You do not have permission to use this command')
-        elif args == 'on' or args == 'off':
-            db_manager.toggle_exclusion(guild_id, args)
-            await message.channel.send('Exclusion turned ' + args)
-        else:
-            await message.channel.send('Unrecognized argument, please use \"on\" or \"off\"')
+        
+        # Takes 'used quotes' as args, resets guild's used_quotes to a blank array
+        elif command == 'clear':
+            if perms.check_perms(message.guild, message.author, is_uvm=True) == False:
+                await message.channel.send('You do not have permission to use this command')
+            else:
+                db_manager.clear_used_quotes(guild_id)
+                await message.channel.send('Used quotes cleared')
 
-    # Permission management
-    # Syntax -mqb perms <set/unset> <cmd> <role>
-    # TODO: Set up so it works with embeds
-    elif command == 'perms':      
-        valid_perms = perms.check_perms(message.guild, message.author, is_perms=True)
-        if  valid_perms and args == 'reset':
-            perms.reset_perms(guild_id)
-            await message.channel.send('Perms reset, to view current permissions use `help <command>`')
-        elif valid_perms:
-            full_args = args.split(' ')
-            action = full_args[0]       # set
-            if action == 'set' and len(full_args) <= 1:
-                await message.channel.send("Invalid argument")
-            elif action == 'set':
-                cmd = full_args[1].strip()
-                if cmd == '':   # weird bug where 'perms' is replaced by an empty string
-                    cmd = 'perms'
-                
-                try:    # If role is given as expected
-                    role_id = int(full_args[2][3:-1])
-                    role = message.guild.get_role(role_id)
-                    if role is None:
-                        await message.channel.send('Invalid Role')
-                    else:
-                        perms.set_perms(message.guild, cmd, role_id)
-                        await message.channel.send('Permission for command {0} set to {1}'.format(cmd, str(role)))
-                except ValueError:  # Catches use of unofficial roles such as @everyone
-                    if full_args[2] == '@everyone':
-                        perms.set_perms(message.guild, cmd, 0)
-                        await message.channel.send('Permission for command {0} set to @ everyone'.format(cmd))
-                    else:
-                        await message.channel.send('Invalid Role')
+        # Toggles quote exclusion on or off... does "-mqb quote Peter Parker" draw from ALL universes, or just those enabled
+        elif command == 'exclude':
+            if args == '':      # No arg, check what exclusion is set to (availible to everyone)
+                await message.channel.send('Exclusion is {0}'.format(db_manager.check_exclusion(message.guild)))
+
+            elif perms.check_perms(message.guild, message.author, is_excl=True) == False:
+                await message.channel.send('You do not have permission to use this command')
+            elif args == 'on' or args == 'off':
+                db_manager.toggle_exclusion(guild_id, args)
+                await message.channel.send('Exclusion turned ' + args)
+            else:
+                await message.channel.send('Unrecognized argument, please use \"on\" or \"off\"')
+
+        # Permission management
+        # Syntax -mqb perms <set/unset> <cmd> <role>
+        # TODO: Set up so it works with embeds
+        elif command == 'perms':      
+            valid_perms = perms.check_perms(message.guild, message.author, is_perms=True)
+            if  valid_perms and args == 'reset':
+                perms.reset_perms(guild_id)
+                await message.channel.send('Perms reset, to view current permissions use `help <command>`')
+            elif valid_perms:
+                full_args = args.split(' ')
+                action = full_args[0]       # set
+                if action == 'set' and len(full_args) <= 1:
+                    await message.channel.send("Invalid argument")
+                elif action == 'set':
+                    cmd = full_args[1].strip()
+                    if cmd == '':   # weird bug where 'perms' is replaced by an empty string
+                        cmd = 'perms'
+                    
+                    try:    # If role is given as expected
+                        role_id = int(full_args[2][3:-1])
+                        role = message.guild.get_role(role_id)
+                        if role is None:
+                            await message.channel.send('Invalid Role')
+                        else:
+                            perms.set_perms(message.guild, cmd, role_id)
+                            await message.channel.send('Permission for command {0} set to {1}'.format(cmd, str(role)))
+                    except ValueError:  # Catches use of unofficial roles such as @everyone
+                        if full_args[2] == '@everyone':
+                            perms.set_perms(message.guild, cmd, 0)
+                            await message.channel.send('Permission for command {0} set to @ everyone'.format(cmd))
+                        else:
+                            await message.channel.send('Invalid Role')
+            
+
+            else:
+                await message.channel.send('You do not have permission to use this command')
+        
         
 
         else:
-            await message.channel.send('You do not have permission to use this command')
-    
-    
+            await message.channel.send('I\'m sorry, I don\'t recognize that command, type `-mqb help` for a list of commands')
+    except discord.errors.Forbidden:
+        print('Permissions Error')
+        embed_var = discord.Embed(title="Error in " + message.guild.name, description='Call: ' + '`' + message.content + '`', color=COLOR)
+        embed_var.add_field(name='Reason', value='MQB Quotes is missing permissions in this server or channel, please ensure that the bot has been granted all permissions requested.\nIf unsure of what to add, [try re-inviting MQB Quotes](https://discord.com/oauth2/authorize?client_id=867083322722353222&permissions=126016&scope=bot).\n\nFor further assistance, join the support server [MQB Official](https://discord.com/invite/d3q9jmxnuh).')
+        embed_var.set_footer(text='Missing Permissions')
 
-    else:
-        await message.channel.send('I\'m sorry, I don\'t recognize that command, type `-mqb help` for a list of commands')
-
+        await message.author.send(embed=embed_var)
      
 
 
